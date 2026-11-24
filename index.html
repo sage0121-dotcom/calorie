@@ -98,7 +98,6 @@
   .recipe { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 12px 0; border-bottom: 1px dashed var(--line); flex-wrap: wrap; }
   .recipe:last-child { border-bottom: 0; }
   .recipe .acts { display: flex; gap: 4px; }
-  footer { margin-top: 26px; font-size: 11px; color: var(--muted); text-align: center; line-height: 1.7; }
   #loading { text-align: center; color: var(--muted); padding: 30px 0; }
 </style>
 </head>
@@ -180,11 +179,6 @@
     </div>
   </section>
 
-  <footer>
-    영양성분: 식품의약품안전처 식품영양성분 데이터베이스 (<span id="built"></span>)<br>
-    %: 1일 영양성분 기준치 대비 (「식품 등의 표시·광고에 관한 법률 시행규칙」 별표 5)<br>
-    기본 1인분 분량과 조리 기름 양은 일반적인 대략값이며, 화면에서 바꿀 수 있어요.
-  </footer>
 </main>
 
 <script>
@@ -585,16 +579,24 @@ $('importFile').onchange = async (e) => {
 
 // ================================================================ 시작
 (async () => {
+  const getJson = async (url) => {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`${url} 파일이 없어요 (HTTP ${r.status}). data 폴더가 index.html과 같은 위치에 올라갔는지 확인하세요.`);
+    return r.json();
+  };
+  if (location.protocol === 'file:') {
+    $('loading').innerHTML = 'PC에서 index.html을 직접 열면 브라우저가 데이터 파일 읽기를 막아요.<br>GitHub Pages 주소(https://아이디.github.io/calorie)로 접속해 주세요.';
+    return;
+  }
   try {
-    const [core, meta] = await Promise.all([fetch('data/core.json').then(r => r.json()), fetch('data/meta.json').then(r => r.json())]);
+    const [core, meta] = await Promise.all([getJson('data/core.json'), getJson('data/meta.json')]);
     CORE = core.map(wrap); META = meta;
-    $('built').textContent = `${(meta.core + meta.processed).toLocaleString()}건, ${meta.built} 기준`;
     const oil = (await searchFood('콩기름', { raw: true })).find(x => x.group === '원재료성');
     if (oil) OIL = { ...oil, name: '식용유(콩기름)' };
     $('loading').style.display = 'none'; $('tab-meal').style.display = '';
     renderMeal();
   } catch (e) {
-    $('loading').innerHTML = '데이터를 불러오지 못했어요. 새로고침해 주세요.';
+    $('loading').innerHTML = '데이터를 불러오지 못했어요.<br><span class="meta">' + esc(e.message) + '</span>';
   }
 })();
 </script>
