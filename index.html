@@ -262,30 +262,52 @@ async function searchFood(query, { raw = false, limit = 15 } = {}) {
     scored.push(raw ? [p, s, w.n.length, w.r] : [s, p, w.n.length, w.r]);
   }
   scored.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
-  // 가공식품은 같은 이름의 여러 제조사 제품을 한 줄로 묶음 (대표: 열량 중앙값)
+  // 유사 메뉴(같은 기본 이름)는 한 줄로 묶어 평균 — 음식·가공식품은 섞지 않음
   const groups = new Map();
   for (const [, , , r] of scored) {
-    const key = r[1] === 2 ? `${r[0]}|p` : `${r[0]}|${r[5]}|${r[1]}`;
+    const key = `${r[1]}|${baseKey(r)}`;
     if (!groups.has(key)) { if (groups.size >= limit) continue; groups.set(key, []); }
     groups.get(key).push(r);
   }
-  const out = [];
-  for (const rows of groups.values()) {
-    if (rows.length === 1 || rows[0][1] !== 2) { out.push(toItem(rows[0])); continue; }
-    const s = [...rows].sort((a, b) => a[5] - b[5]), lo = s[0][5], hi = s[s.length - 1][5];
-    out.push({ ...toItem(s[Math.floor(s.length / 2)]), maker: '', variants: rows.length, kcal_range: lo !== hi ? `${Math.round(lo)}~${Math.round(hi)}` : '' });
-  }
+  const out = [...groups.values()].map(averaged);
   return [...recipeItems(query), ...out].map(it => ({ ...it, portion: portionFor(it) }));
 }
-async function variantsOf(name) {
-  const rows = (await loadShard(shardOf(name))).filter(w => w.r[0] === name).map(w => toItem(w.r));
-  return rows.sort((a, b) => a.kcal - b.kcal).map(it => ({ ...it, portion: portionFor(it) }));
+
+// 기본 이름: '아이스크림_민트초콜릿칩 아이스크림 레디팩 (대)' → '민트초콜릿칩'
+const SIZE_WORDS = new Set(['레디팩', '파인트', '쿼터', '패밀리', '하프갤런', '싱글레귤러', '싱글킹', '더블주니어', '더블레귤러',
+  '컵', '콘', '대', '중', '소', '라지', '레귤러', '스몰', '미디엄', '미니', 'l', 'm', 's', 'r', '톨', '그란데', '벤티']);
+function baseKey(r) {
+  const name = r[0];
+  if (r[1] === 1) return norm(name);                 // 원재료는 부위·상태별로 달라 묶지 않음
+  let pre = '', b = name;
+  const i = name.indexOf('_');
+  if (i > 0) { pre = name.slice(0, i); b = name.slice(i + 1); }
+  b = b.replace(/[([][^)\]]*[)\]]/g, ' ');           // (대) (H) [한정] 등
+  const words = b.trim().split(/\s+/).filter(Boolean);
+  while (words.length > 1 && (SIZE_WORDS.has(words[words.length - 1].toLowerCase()) || words[words.length - 1] === pre)) words.pop();
+  return norm(pre + words.join('')) || norm(name);   // 앞 분류도 포함 ('김치찌개_햄' ≠ '부대찌개_햄')
+}
+function averaged(rows) {
+  const seen = new Set();                              // 이름·열량이 같은 중복 자료는 한 번만
+  rows = rows.filter(r => { const k = r[0] + '|' + r[5]; if (seen.has(k)) return false; seen.add(k); return true; });
+  if (rows.length === 1) return toItem(rows[0]);
+  const items = rows.map(toItem), avg = {};
+  // 열량이 중앙값의 ½ 미만·2배 초과인 자료(입력 오류 등)는 평균에서 제외 — '자세히'에는 표시
+  const med = [...items].sort((a, b) => a.kcal - b.kcal)[Math.floor(items.length / 2)].kcal;
+  const use = items.filter(x => med === 0 || (x.kcal >= med / 2 && x.kcal <= med * 2));
+  for (const k of NK) { const v = use.map(x => x[k]).filter(x => x != null); avg[k] = v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; }
+  const ks = use.map(x => x.kcal).sort((a, b) => a - b);
+  const pk = items.map(x => x.pkg_grams).filter(Boolean).sort((a, b) => a - b);
+  const short = [...items].sort((a, b) => a.name.length - b.name.length)[0];
+  return { ...items[0], ...avg, name: short.name, maker: '', pkg_grams: pk.length ? pk[Math.floor(pk.length / 2)] : null,
+           variants: items.length, excluded: items.length - use.length, kcal_range: ks[0] !== ks[ks.length - 1] ? `${Math.round(ks[0])}~${Math.round(ks[ks.length - 1])}` : '',
+           members: items };
 }
 
 // 같은 이름이 여러 개일 때 구분용 설명
 function srcInfo(it) {
   const parts = [it.source === '내 레시피' ? '내 레시피' : (it.group || it.category || '')];
-  if (it.variants > 1) parts.push(`제품 ${it.variants}개 중 대표값${it.kcal_range ? ` (100g당 ${it.kcal_range}kcal)` : ''}`);
+  if (it.variants > 1) parts.push(`유사 ${it.variants}개 평균${it.kcal_range ? ` (100g당 ${it.kcal_range}kcal)` : ''}${it.excluded ? ` · 이상값 ${it.excluded}개 제외` : ''}`);
   else if (it.maker) parts.push(it.maker);
   return parts.filter(Boolean).map(esc).join(' · ');
 }
@@ -321,7 +343,7 @@ async function mealSearch(more = false) {
 function showResults(items, title = '', hasMore = false) {
   $('qres').innerHTML = title + items.map((it, j) => `<div class="res"><span class="grow">${it.source === '내 레시피' ? '<span class="tag">내 레시피</span>' : ''}${esc(it.name)}<br>
     <span class="meta">${srcInfo(it)} · ${esc(it.portion.label)} ${Math.round(it.kcal * it.portion.grams / 100)}kcal</span></span>
-    ${it.variants > 1 ? `<button class="sm" data-v="${j}">제품별</button>` : ''}
+    ${it.variants > 1 ? `<button class="sm" data-v="${j}">자세히</button>` : ''}
     <button class="sm" data-j="${j}">추가</button></div>`).join('')
     + (hasMore ? `<button class="link" id="moreRes" style="width:100%;padding:12px 0">결과 더 보기 (지금 ${items.length}개)</button>` : '');
   if (hasMore) $('moreRes').onclick = () => { $('moreRes').textContent = '불러오는 중…'; mealSearch(true); };
@@ -331,10 +353,11 @@ function showResults(items, title = '', hasMore = false) {
     $('qres').innerHTML = ''; $('q').value = '';
     renderMeal();
   });
-  $('qres').querySelectorAll('button[data-v]').forEach(b => b.onclick = async () => {
-    const name = items[b.dataset.v].name, v = await variantsOf(name);
-    showResults(v, `<div class="row meta" style="padding-top:8px"><span>'${esc(name)}' 제품 ${v.length}개 (제조사별)</span><button class="link" id="backRes">← 검색 결과</button></div>`);
-    $('backRes').onclick = mealSearch;
+  $('qres').querySelectorAll('button[data-v]').forEach(b => b.onclick = () => {
+    const g = items[b.dataset.v];
+    const v = [...g.members].sort((a, b) => a.kcal - b.kcal).map(it => ({ ...it, portion: portionFor(it) }));
+    showResults(v, `<div class="row meta" style="padding-top:8px"><span>'${esc(g.name)}' 유사 ${v.length}개 (평균 100g당 ${Math.round(g.kcal)}kcal)</span><button class="link" id="backRes">← 검색 결과</button></div>`);
+    $('backRes').onclick = () => mealSearch();
   });
 }
 
@@ -353,7 +376,7 @@ function renderMeal() {
     const f = meal[i], t = nutOf(f.per100g, f.grams), p = f.per100g;
     for (const k of NK) if (t[k] != null) { sum[k] += t[k]; if (k in has) has[k] = true; }
     const src = p.source === '내 레시피' ? '<span class="tag">내 레시피</span>'
-      : `<span class="tag">식약처</span>${esc(p.name)}${p.maker ? ` (${esc(p.maker)})` : p.variants > 1 ? ` (제품 ${p.variants}개 대표값)` : ''} · `;
+      : `<span class="tag">식약처</span>${esc(p.name)}${p.maker ? ` (${esc(p.maker)})` : p.variants > 1 ? ` (유사 ${p.variants}개 평균)` : ''} · `;
     return `<div class="food">
       <div class="row"><span class="fname">${esc(f.name)}</span><span class="fkcal">${Math.round(t.kcal)} kcal</span></div>
       <div class="nut">${nutLine(t)}</div>
