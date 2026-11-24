@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>칼로리 계산기</title>
+<meta name="description" content="식약처 식품영양성분DB 기준 칼로리·영양성분 계산기">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M6 26C6 13 15 6 27 5c0 13-7 21-19 21' fill='%234E7A5A'/%3E%3Cpath d='M7 25C12 19 17 14 23 10' stroke='%23F6F2E9' stroke-width='1.6' fill='none'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F6F2E9; --card: #FFFDF8; --ink: #3A3029; --muted: #8A7F73; --line: #E7DDCB;
+    --accent: #4E7A5A; --accent-deep: #2F5A3E; --accent-ink: #FFFDF8; --soft: #EAF0E6;
+    --kcal: #C2603A; --warn: #A8641E; --warn-bg: #F8EBD8; --shadow: 0 1px 2px rgba(58,48,41,.06), 0 4px 14px rgba(58,48,41,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161B17; --card: #1F2620; --ink: #ECE7DD; --muted: #A39C90; --line: #333B34;
+      --accent: #7FB08A; --accent-deep: #A6CFAE; --accent-ink: #13201A; --soft: #26322A;
+      --kcal: #E08A62; --warn: #E0A64A; --warn-bg: #33291A; --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161B17; --card: #1F2620; --ink: #ECE7DD; --muted: #A39C90; --line: #333B34;
+    --accent: #7FB08A; --accent-deep: #A6CFAE; --accent-ink: #13201A; --soft: #26322A;
+    --kcal: #E08A62; --warn: #E0A64A; --warn-bg: #33291A; --shadow: none;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.55 "Noto Sans KR", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 22px 16px 64px; }
+  .serif { font-family: "Gowun Batang", serif; }
+
+  header.top { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  header.top svg { width: 30px; height: 30px; flex: none; }
+  h1 { font-family: "Gowun Batang", serif; font-size: 23px; margin: 0; letter-spacing: -.3px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 2px 0 16px; }
+  h3 { font-family: "Gowun Batang", serif; font-size: 15px; margin: 18px 0 8px; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin-bottom: 14px; box-shadow: var(--shadow); }
+  input, select { font: inherit; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+  input[type=number] { width: 78px; padding: 7px; }
+  .full { width: 100%; padding: 12px; }
+  button { font: inherit; cursor: pointer; color: inherit; }
+  .btn { border: 0; border-radius: 12px; padding: 12px 16px; font-size: 15px; font-weight: 700; background: var(--accent); color: var(--accent-ink); }
+  .btn:hover { background: var(--accent-deep); }
+  .btn.alt { background: transparent; color: var(--accent); border: 1.5px solid var(--accent); }
+  .btn:disabled { opacity: .5; }
+  .sm { font-size: 12px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); white-space: nowrap; }
+  .sm:hover { border-color: var(--accent); }
+  .sm.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .link { border: 0; background: none; color: var(--accent); padding: 6px 0; font-size: 13px; font-weight: 700; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .grow { flex: 1; min-width: 0; }
+  .pick { display: flex; gap: 8px; } .pick .btn { flex: 1; }
+  .meta { font-size: 12px; color: var(--muted); }
+  .empty { color: var(--muted); font-size: 13px; text-align: center; padding: 12px 0; }
+  .err { color: var(--kcal); font-size: 13px; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--soft); color: var(--accent-deep); margin-right: 4px; }
+
+  .tabs { display: flex; gap: 4px; padding: 4px; background: var(--soft); border-radius: 999px; margin-bottom: 16px; }
+  .tab { flex: 1; padding: 9px; border-radius: 999px; border: 0; background: transparent; color: var(--muted); font-weight: 700; }
+  .tab.on { background: var(--card); color: var(--accent-deep); box-shadow: var(--shadow); }
+
+  .search { display: flex; gap: 8px; } .search input { flex: 1; min-width: 0; padding: 12px 14px; }
+  .res { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+  .res:last-child { border-bottom: 0; }
+
+  .total { display: flex; align-items: baseline; justify-content: space-between; }
+  .total > span:first-child { font-family: "Gowun Batang", serif; font-size: 16px; }
+  .kcal { font-family: "Gowun Batang", serif; font-size: 34px; font-weight: 700; color: var(--kcal); letter-spacing: -.5px; }
+  .kcal small { font-size: 16px; margin-left: 2px; }
+  .macros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
+  .macros > div { background: var(--soft); border-radius: 12px; padding: 8px 6px; text-align: center; font-size: 12px; color: var(--muted); }
+  .macros b { display: block; color: var(--ink); font-size: 15px; }
+  .macros .dv { display: block; font-size: 12px; font-weight: 700; color: var(--accent); }
+  .macros .dvnote { background: none; font-size: 10px; line-height: 1.4; text-align: left; display: flex; align-items: center; }
+
+  .set { border: 1.5px dashed var(--line); border-radius: 14px; padding: 10px 12px; margin-bottom: 10px; }
+  .sethead { font-family: "Gowun Batang", serif; font-weight: 700; padding-bottom: 6px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+  .food { padding: 12px 0; border-bottom: 1px dashed var(--line); }
+  .food:last-child { border-bottom: 0; }
+  .fname { font-weight: 700; }
+  .fkcal { font-family: "Gowun Batang", serif; font-weight: 700; color: var(--kcal); white-space: nowrap; font-size: 17px; }
+  .nut { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .ctrl { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; margin-top: 8px; font-size: 13px; }
+  .box { margin-top: 8px; padding: 10px; background: var(--soft); border-radius: 12px; }
+
+  .step { border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-top: 10px; background: var(--bg); }
+  .step .num { font-family: "Gowun Batang", serif; font-weight: 700; color: var(--accent-deep); }
+  .ing { display: flex; align-items: center; gap: 6px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+  .custom { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+  .custom input { padding: 7px; } .custom .nm { flex: 1; min-width: 110px; }
+  .recipe { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 12px 0; border-bottom: 1px dashed var(--line); flex-wrap: wrap; }
+  .recipe:last-child { border-bottom: 0; }
+  .recipe .acts { display: flex; gap: 4px; }
+  footer { margin-top: 26px; font-size: 11px; color: var(--muted); text-align: center; line-height: 1.7; }
+  #loading { text-align: center; color: var(--muted); padding: 30px 0; }
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 26C6 13 15 6 27 5c0 13-7 21-19 21" fill="var(--accent)"/><path d="M7 25C12 19 17 14 23 10" stroke="var(--bg)" stroke-width="1.6" fill="none"/></svg>
+    <h1>칼로리 계산기</h1>
+  </header>
+  <p class="sub">식약처 식품영양성분DB 기준 · 오늘 먹은 음식과 내 레시피의 칼로리·영양성분</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab on" data-tab="meal">식단</button>
+    <button class="tab" data-tab="recipes">내 레시피</button>
+  </div>
+
+  <div id="loading">식품 데이터를 불러오는 중…</div>
+
+  <!-- ===================== 식단 ===================== -->
+  <section id="tab-meal" style="display:none">
+    <div class="card">
+      <div class="search">
+        <input id="q" placeholder="음식 검색 (예: 김치찌개, 신라면, 쌀밥)" autocomplete="off" enterkeyhint="search">
+        <button class="btn" id="qBtn">검색</button>
+      </div>
+      <div id="qres"></div>
+    </div>
+
+    <div class="card" id="summary" style="display:none">
+      <div class="total"><span>오늘 섭취</span><span class="kcal" id="tkcal">0</span></div>
+      <div class="macros" id="tmac"></div>
+      <div class="row" style="margin-top:6px"><span class="meta" id="tcount"></span><button class="link" id="clearMeal">모두 지우기</button></div>
+    </div>
+    <div class="card" id="list" style="display:none"></div>
+  </section>
+
+  <!-- ===================== 내 레시피 ===================== -->
+  <section id="tab-recipes" style="display:none">
+    <div id="rlistView">
+      <div class="card">
+        <div class="row"><h3 style="margin:0">저장한 레시피</h3><button class="btn" id="newRecipe" style="padding:8px 14px">+ 새 레시피</button></div>
+        <div id="rlist"></div>
+      </div>
+      <div class="card">
+        <div class="meta">레시피는 이 기기의 브라우저에만 저장돼요. 다른 기기로 옮기려면 내보낸 파일을 그 기기에서 가져오세요.</div>
+        <div class="pick" style="margin-top:10px">
+          <button class="btn alt" id="exportR">내보내기</button>
+          <button class="btn alt" id="importR">가져오기</button>
+        </div>
+        <input type="file" id="importFile" accept="application/json,.json" hidden>
+        <div class="meta" id="ioMsg" style="margin-top:6px"></div>
+      </div>
+    </div>
+
+    <div id="reditView" style="display:none">
+      <div class="card">
+        <div class="row"><button class="link" id="backList">← 목록</button><span class="meta" id="reditMode"></span></div>
+        <input id="rname" class="full" placeholder="요리 이름 (예: 돼지고기 김치찌개)">
+        <div id="steps"></div>
+        <button class="link" id="addStep">+ 조리 단계 추가 (예: 볶은 뒤 끓이기)</button>
+        <h3>분량</h3>
+        <div class="ctrl">
+          <input type="number" id="rserv" min="1" step="1" value="2"> 인분 ·
+          완성 무게 <input type="number" id="rfin" min="0" step="10" placeholder="자동"> g
+        </div>
+        <p class="meta">완성 무게를 비워 두면 재료+기름 무게로 계산해요. 국물 요리는 물 무게가 빠지니 알면 입력하세요.</p>
+      </div>
+
+      <div class="card" id="rsum" style="display:none">
+        <div class="total"><span>1인분</span><span class="kcal" id="rkcal">0</span></div>
+        <div class="meta" id="rtotal"></div>
+        <div class="macros" id="rmac"></div>
+        <div class="pick" style="margin-top:12px">
+          <button class="btn" id="rsave">저장</button>
+          <button class="btn alt" id="rmeal">식단에 1인분 추가</button>
+        </div>
+        <div class="err" id="rerr"></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    영양성분: 식품의약품안전처 식품영양성분 데이터베이스 (<span id="built"></span>)<br>
+    %: 1일 영양성분 기준치 대비 (「식품 등의 표시·광고에 관한 법률 시행규칙」 별표 5)<br>
+    기본 1인분 분량과 조리 기름 양은 일반적인 대략값이며, 화면에서 바꿀 수 있어요.
+  </footer>
+</main>
+
+<script>
+// ================================================================ 공통
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const r1 = (v) => Math.round(v * 10) / 10;
+const NK = ['kcal', 'carbs', 'protein', 'fat', 'sugar', 'sodium'];
+const NLABEL = { carbs: '탄수화물', protein: '단백질', fat: '지방', sugar: '당류', sodium: '나트륨' };
+const nutOf = (p, g) => { const o = {}; for (const k of NK) o[k] = p[k] == null ? null : p[k] * g / 100; return o; };
+// 1일 영양성분 기준치 — 「식품 등의 표시·광고에 관한 법률 시행규칙」 별표 5 (열량은 % 표시 대상 아님)
+const DV = { carbs: 324, sugar: 100, protein: 55, fat: 54, sodium: 2000 };
+const macrosHtml = (s, n = 1) => ['carbs', 'protein', 'fat', 'sugar', 'sodium'].map(k => {
+  const v = s[k] == null ? null : s[k] / n;
+  return `<div>${NLABEL[k]}<b>${v == null ? '-' : k === 'sodium' ? Math.round(v).toLocaleString() + 'mg' : r1(v) + 'g'}</b>${v == null ? '' : `<span class="dv">${Math.round(v / DV[k] * 100)}%</span>`}</div>`;
+}).join('') + '<div class="dvnote">%: 1일 영양성분<br>기준치 대비</div>';
+const nutLine = (t) => `탄 ${t.carbs == null ? '-' : r1(t.carbs)}g · 단 ${t.protein == null ? '-' : r1(t.protein)}g · 지 ${t.fat == null ? '-' : r1(t.fat)}g`
+  + (t.sugar != null ? ` · 당 ${r1(t.sugar)}g` : '') + (t.sodium != null ? ` · 나트륨 ${Math.round(t.sodium)}mg` : '');
+const kcalHtml = (v) => `${Math.round(v).toLocaleString()}<small>kcal</small>`;
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('calorie.' + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('calorie.' + k, JSON.stringify(v)); } catch (e) {} },
+};
+
+// ================================================================ 식품 데이터 (식약처 DB, 정적 파일)
+const GROUPS = ['음식', '원재료성', '가공식품', ''];
+const norm = (s) => String(s || '').replace(/[\s_()\[\],·\-]/g, '').toLowerCase();
+const wrap = (r) => {  // [이름, 구분, 대표, 대분류, 업체, kcal, 탄, 단, 지, 당, 나트륨, 1개중량]
+  const name = r[0];
+  return { r, n: norm(name), alt: name.includes(',') ? norm(name.split(',')[1]) : null };
+};
+const toItem = (r) => ({ name: r[0], group: GROUPS[r[1]], rep: r[2], category: r[3], maker: r[4], kcal: r[5],
+  carbs: r[6], protein: r[7], fat: r[8], sugar: r[9], sodium: r[10], pkg_grams: r[11], source: '식약처' });
+let CORE = [], META = { shards: [] };
+const SHARDS = {};
+// 가공식품 조각: 식품명 첫 글자 코드 % 64 (scripts/build_static.py 와 같은 규칙)
+const shardOf = (name) => { const n = norm(name); return n ? String(n.codePointAt(0) % 64) : '0'; };
+async function loadShard(key) {
+  if (!META.shards.includes(key)) return [];
+  if (!SHARDS[key]) SHARDS[key] = fetch(`data/p/${key}.json`).then(r => r.json()).then(rows => rows.map(wrap)).catch(() => []);
+  return SHARDS[key];
+}
+
+// 음식 대분류별 흔히 먹는 1회 분량 (대략값)
+const PORTIONS = {
+  '밥류': ['1공기', 210], '죽 및 스프류': ['1그릇', 300], '면 및 만두류': ['1그릇', 500], '국 및 탕류': ['1그릇', 400],
+  '찌개 및 전골류': ['1그릇', 300], '김치류': ['1접시', 50], '장아찌·절임류': ['1접시', 30], '젓갈류': ['1숟가락', 15],
+  '장류, 양념류': ['1숟가락', 15], '나물·숙채류': ['1접시', 70], '생채·무침류': ['1접시', 70], '볶음류': ['1인분', 150],
+  '구이류': ['1인분', 150], '조림류': ['1접시', 80], '튀김류': ['1인분', 150], '전·적 및 부침류': ['1인분', 120],
+  '찜류': ['1인분', 200], '빵 및 과자류': ['1개', 80], '음료 및 차류': ['1잔', 250], '유제품류 및 빙과류': ['1개', 150], '과일류': ['1개', 150],
+};
+function portionFor(it) {
+  if (it.portion) return it.portion;
+  if (it.pkg_grams) return { label: '1개', grams: it.pkg_grams };
+  if (it.group === '원재료성') return { label: '100g', grams: 100 };
+  const p = PORTIONS[it.category];
+  return p ? { label: p[0], grams: p[1] } : { label: '100g', grams: 100 };
+}
+
+async function searchFood(query, { raw = false, limit = 15 } = {}) {
+  const q = norm(query); if (!q) return [];
+  const toks = query.toLowerCase().split(/[\s_]+/).filter(Boolean);
+  const pools = [CORE, await loadShard(shardOf(query))];
+  const scored = [];
+  for (const pool of pools) for (const w of pool) {
+    let s;
+    if (!w.n.includes(q)) { if (toks.length > 1 && toks.every(t => w.n.includes(t))) s = 3; else continue; }
+    else if (w.n === q || w.alt === q) s = 0;
+    else if (w.n.startsWith(q)) s = 1;
+    else s = 2;
+    const g = w.r[1];
+    const p = raw ? (g === 1 ? 0 : g === 0 ? 1 : 2) : ((g === 0 ? 0 : g === 1 ? 1 : 2) * 2 + (w.r[2] ? 0 : 1));
+    scored.push(raw ? [p, s, w.n.length, w.r] : [s, p, w.n.length, w.r]);
+  }
+  scored.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
+  // 가공식품은 같은 이름의 여러 제조사 제품을 한 줄로 묶음 (대표: 열량 중앙값)
+  const groups = new Map();
+  for (const [, , , r] of scored) {
+    const key = r[1] === 2 ? `${r[0]}|p` : `${r[0]}|${r[5]}|${r[1]}`;
+    if (!groups.has(key)) { if (groups.size >= limit) continue; groups.set(key, []); }
+    groups.get(key).push(r);
+  }
+  const out = [];
+  for (const rows of groups.values()) {
+    if (rows.length === 1 || rows[0][1] !== 2) { out.push(toItem(rows[0])); continue; }
+    const s = [...rows].sort((a, b) => a[5] - b[5]), lo = s[0][5], hi = s[s.length - 1][5];
+    out.push({ ...toItem(s[Math.floor(s.length / 2)]), maker: '', variants: rows.length, kcal_range: lo !== hi ? `${Math.round(lo)}~${Math.round(hi)}` : '' });
+  }
+  return [...recipeItems(query), ...out].map(it => ({ ...it, portion: portionFor(it) }));
+}
+async function variantsOf(name) {
+  const rows = (await loadShard(shardOf(name))).filter(w => w.r[0] === name).map(w => toItem(w.r));
+  return rows.sort((a, b) => a.kcal - b.kcal).map(it => ({ ...it, portion: portionFor(it) }));
+}
+
+// 같은 이름이 여러 개일 때 구분용 설명
+function srcInfo(it) {
+  const parts = [it.source === '내 레시피' ? '내 레시피' : (it.group || it.category || '')];
+  if (it.variants > 1) parts.push(`제품 ${it.variants}개 중 대표값${it.kcal_range ? ` (100g당 ${it.kcal_range}kcal)` : ''}`);
+  else if (it.maker) parts.push(it.maker);
+  return parts.filter(Boolean).map(esc).join(' · ');
+}
+
+// ================================================================ 탭
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === t));
+  $('tab-meal').style.display = t.dataset.tab === 'meal' ? '' : 'none';
+  $('tab-recipes').style.display = t.dataset.tab === 'recipes' ? '' : 'none';
+  if (t.dataset.tab === 'recipes') renderRecipeList();
+});
+const showTab = (name) => document.querySelector(`.tab[data-tab="${name}"]`).click();
+
+// ================================================================ 식단
+let meal = store.get('meal', []);   // {name, set_name, grams, portion, per100g}  — 새로고침해도 유지
+const saveMeal = () => store.set('meal', meal);
+const MULTS = [0.5, 1, 1.5, 2, 3];
+const ML = { 0.5: '½', 1: '1', 1.5: '1½', 2: '2', 3: '3' };
+const unitText = (p, m) => /^1[^\d.]/.test(p.label) ? ML[m] + p.label.slice(1) : Math.round(p.grams * m) + 'g';
+
+$('qBtn').onclick = mealSearch;
+$('q').onkeydown = (e) => { if (e.key === 'Enter') mealSearch(); };
+async function mealSearch() {
+  const q = $('q').value.trim(); if (!q) return;
+  $('qres').innerHTML = '<div class="empty">검색 중…</div>';
+  const items = await searchFood(q);
+  if (!items.length) { $('qres').innerHTML = '<div class="empty">결과가 없어요. 더 짧거나 다른 이름으로 검색해 보세요.<br>(예: 계란후라이 → 달걀프라이)</div>'; return; }
+  showResults(items);
+}
+function showResults(items, title = '') {
+  $('qres').innerHTML = title + items.map((it, j) => `<div class="res"><span class="grow">${it.source === '내 레시피' ? '<span class="tag">내 레시피</span>' : ''}${esc(it.name)}<br>
+    <span class="meta">${srcInfo(it)} · ${esc(it.portion.label)} ${Math.round(it.kcal * it.portion.grams / 100)}kcal</span></span>
+    ${it.variants > 1 ? `<button class="sm" data-v="${j}">제품별</button>` : ''}
+    <button class="sm" data-j="${j}">추가</button></div>`).join('');
+  $('qres').querySelectorAll('button[data-j]').forEach(b => b.onclick = () => {
+    const it = items[b.dataset.j];
+    meal.push({ name: it.name, set_name: '', grams: it.portion.grams, portion: it.portion, per100g: it });
+    $('qres').innerHTML = ''; $('q').value = '';
+    renderMeal();
+  });
+  $('qres').querySelectorAll('button[data-v]').forEach(b => b.onclick = async () => {
+    const name = items[b.dataset.v].name, v = await variantsOf(name);
+    showResults(v, `<div class="row meta" style="padding-top:8px"><span>'${esc(name)}' 제품 ${v.length}개 (제조사별)</span><button class="link" id="backRes">← 검색 결과</button></div>`);
+    $('backRes').onclick = mealSearch;
+  });
+}
+
+function renderMeal() {
+  saveMeal();
+  if (!meal.length) { $('summary').style.display = $('list').style.display = 'none'; return; }
+  const sum = Object.fromEntries(NK.map(k => [k, 0])), has = { sugar: false, sodium: false };
+  const groups = [];
+  meal.forEach((f, i) => {
+    const key = f.set_name || `__${i}`;
+    let g = groups.find(x => x.key === key);
+    if (!g) groups.push(g = { key, name: f.set_name, items: [] });
+    g.items.push(i);
+  });
+  const foodHtml = (i) => {
+    const f = meal[i], t = nutOf(f.per100g, f.grams), p = f.per100g;
+    for (const k of NK) if (t[k] != null) { sum[k] += t[k]; if (k in has) has[k] = true; }
+    const src = p.source === '내 레시피' ? '<span class="tag">내 레시피</span>'
+      : `<span class="tag">식약처</span>${esc(p.name)}${p.maker ? ` (${esc(p.maker)})` : p.variants > 1 ? ` (제품 ${p.variants}개 대표값)` : ''} · `;
+    return `<div class="food">
+      <div class="row"><span class="fname">${esc(f.name)}</span><span class="fkcal">${Math.round(t.kcal)} kcal</span></div>
+      <div class="nut">${nutLine(t)}</div>
+      <div class="meta">${src}100g당 ${Math.round(p.kcal)}kcal</div>
+      <div class="ctrl">${MULTS.map(m => { const g = Math.round(f.portion.grams * m);
+          return `<button class="sm ${Math.round(f.grams) === g ? 'on' : ''}" data-act="qty" data-i="${i}" data-g="${g}">${esc(unitText(f.portion, m))}</button>`; }).join('')}</div>
+      <div class="ctrl"><input type="number" min="0" step="10" value="${Math.round(f.grams)}" data-act="grams" data-i="${i}"> g
+        <button class="sm" data-act="swap" data-i="${i}">음식 바꾸기</button>
+        <button class="sm" data-act="del" data-i="${i}">삭제</button></div>
+      <div class="box" id="swap${i}" style="display:none">
+        <div class="search"><input value="${esc(f.name)}" id="swq${i}"><button class="sm" data-act="swapq" data-i="${i}">검색</button></div>
+        <div id="swr${i}"></div></div>
+    </div>`;
+  };
+  $('list').innerHTML = groups.map(g => {
+    const body = g.items.map(foodHtml).join('');
+    if (!g.name) return body;
+    const kc = g.items.reduce((a, i) => a + meal[i].per100g.kcal * meal[i].grams / 100, 0);
+    return `<div class="set"><div class="sethead row"><span>${esc(g.name)}</span><span class="fkcal">${Math.round(kc)} kcal</span></div>${body}</div>`;
+  }).join('');
+  if (!has.sugar) sum.sugar = null; if (!has.sodium) sum.sodium = null;
+  $('tkcal').innerHTML = kcalHtml(sum.kcal);
+  $('tmac').innerHTML = macrosHtml(sum);
+  $('tcount').textContent = `음식 ${meal.length}개`;
+  $('summary').style.display = $('list').style.display = 'block';
+}
+$('list').addEventListener('click', async (e) => {
+  const b = e.target.closest('button[data-act]'); if (!b) return;
+  const i = +b.dataset.i, f = meal[i];
+  if (b.dataset.act === 'qty') { f.grams = +b.dataset.g; renderMeal(); }
+  if (b.dataset.act === 'del') { meal.splice(i, 1); renderMeal(); }
+  if (b.dataset.act === 'swap') { $('swap' + i).style.display = 'block'; swapSearch(i); }
+  if (b.dataset.act === 'swapq') swapSearch(i);
+});
+async function swapSearch(i) {
+  const f = meal[i], items = await searchFood($('swq' + i).value.trim());
+  $('swr' + i).innerHTML = items.length ? items.map((it, j) =>
+    `<div class="res"><span class="grow">${esc(it.name)}<br><span class="meta">${srcInfo(it)} · ${esc(it.portion.label)} ${Math.round(it.kcal * it.portion.grams / 100)}kcal</span></span><button class="sm" data-j="${j}">선택</button></div>`).join('')
+    : '<div class="empty">결과 없음</div>';
+  $('swr' + i).querySelectorAll('button').forEach(bb => bb.onclick = () => {
+    const it = items[bb.dataset.j], mult = f.grams / f.portion.grams;   // 고른 양(배수) 유지
+    Object.assign(f, { name: it.name, per100g: it, portion: it.portion, grams: Math.round(it.portion.grams * mult) });
+    renderMeal();
+  });
+}
+$('list').addEventListener('change', (e) => {
+  if (e.target.dataset.act === 'grams') { meal[+e.target.dataset.i].grams = +e.target.value || 0; renderMeal(); }
+});
+$('clearMeal').onclick = () => { if (confirm('식단을 모두 지울까요?')) { meal = []; renderMeal(); } };
+
+// ================================================================ 내 레시피 (이 기기 브라우저에 저장)
+const TBSP_OIL = 13;  // 식용유 1큰술 ≈ 13g
+const METHODS = {
+  prep:  { label: '손질·생것·무침', note: '재료 칼로리를 그대로 더해요.' },
+  boil:  { label: '삶기·찌기·데치기', note: '물로 익히면 무게는 변해도 칼로리는 그대로예요.' },
+  soup:  { label: '끓이기 (국·찌개·조림)', note: '재료 칼로리를 그대로 더해요. 물은 0kcal.' },
+  grill: { label: '굽기 (기름 없이)', note: '재료 그대로 계산해요. 고기에서 빠지는 기름만큼 실제는 조금 낮을 수 있어요.' },
+  stir:  { label: '볶음', oil: 1, note: '사용한 기름을 모두 섭취한다고 보고 더해요.' },
+  pan:   { label: '부침·전', oil: 2, note: '사용한 기름을 모두 섭취한다고 보고 더해요.' },
+  fry:   { label: '튀김', fry: 10, note: '이 단계 재료가 흡수하는 기름을 무게 대비 %로 더해요 (보통 5~15%).' },
+};
+let OIL = { name: '식용유(콩기름)', kcal: 921, protein: 0, fat: 100, carbs: 0, sugar: 0, sodium: 0 };
+const newStep = (method = 'prep') => ({ method, oilTbsp: METHODS[method].oil || 0, fryPct: METHODS[method].fry || 10, items: [] });
+let RECIPES = store.get('recipes', []);
+const saveRecipes = () => store.set('recipes', RECIPES);
+let R = null;
+
+function recipeItems(query) {
+  const q = norm(query);
+  return RECIPES.filter(r => !q || norm(r.name).includes(q)).map(r => ({
+    ...r.per100g, name: r.name, source: '내 레시피', group: '레시피', category: '내 레시피',
+    portion: { label: '1인분', grams: r.serving_grams || 100 },
+  }));
+}
+
+function renderRecipeList() {
+  const list = [...RECIPES].sort((a, b) => (b.updated || 0) - (a.updated || 0));
+  $('rlist').innerHTML = list.length ? list.map(x => `<div class="recipe"><span class="grow"><b>${esc(x.name)}</b><br>
+      <span class="meta">1인분 ${Math.round(x.kcal_serving || 0)}kcal · ${x.serv}인분 · ${x.steps.map(s => (METHODS[s.method]?.label || '').split(' ')[0]).join(' → ')}</span></span>
+      <span class="acts"><button class="sm" data-act="meal" data-id="${x.id}">식단 추가</button>
+      <button class="sm" data-act="edit" data-id="${x.id}">편집</button>
+      <button class="sm" data-act="del" data-id="${x.id}">삭제</button></span></div>`).join('')
+    : '<div class="empty">아직 저장한 레시피가 없어요.<br>자주 만드는 요리를 등록해 두면 식단에서 바로 검색해 쓸 수 있어요.</div>';
+  $('rlist').querySelectorAll('button').forEach(b => b.onclick = () => {
+    const x = RECIPES.find(y => y.id === b.dataset.id);
+    if (b.dataset.act === 'edit') openEditor(x);
+    if (b.dataset.act === 'meal') { addRecipeToMeal(x.name, x.per100g, x.serving_grams); showTab('meal'); }
+    if (b.dataset.act === 'del' && confirm(`'${x.name}' 레시피를 삭제할까요?`)) { RECIPES = RECIPES.filter(y => y.id !== x.id); saveRecipes(); renderRecipeList(); }
+  });
+}
+
+function openEditor(x) {
+  R = x ? JSON.parse(JSON.stringify({ id: x.id, name: x.name, steps: x.steps, serv: x.serv, fin: x.fin }))
+        : { name: '', steps: [newStep('prep')], serv: 2, fin: 0 };
+  $('rname').value = R.name; $('rserv').value = R.serv; $('rfin').value = R.fin || '';
+  $('reditMode').textContent = x ? '편집 중' : '새 레시피'; $('rerr').textContent = '';
+  $('rlistView').style.display = 'none'; $('reditView').style.display = '';
+  renderSteps(); window.scrollTo(0, 0);
+}
+$('newRecipe').onclick = () => openEditor(null);
+$('backList').onclick = () => { $('reditView').style.display = 'none'; $('rlistView').style.display = ''; renderRecipeList(); };
+$('addStep').onclick = () => { R.steps.push(newStep('soup')); renderSteps(); };
+$('rname').oninput = () => R.name = $('rname').value;
+$('rserv').oninput = () => { R.serv = Math.max(1, +$('rserv').value || 1); renderRecipeSum(); };
+$('rfin').oninput = () => { R.fin = +$('rfin').value || 0; renderRecipeSum(); };
+
+function stepOilG(s) {
+  const m = METHODS[s.method], w = s.items.reduce((a, it) => a + (+it.grams || 0), 0);
+  return m.fry ? w * s.fryPct / 100 : m.oil !== undefined ? s.oilTbsp * TBSP_OIL : 0;
+}
+function renderSteps() {
+  $('steps').innerHTML = R.steps.map((s, si) => {
+    const m = METHODS[s.method], oilG = stepOilG(s);
+    return `<div class="step">
+      <div class="row"><span class="num">${si + 1}단계</span>${R.steps.length > 1 ? `<button class="sm" data-act="sdel" data-s="${si}">단계 삭제</button>` : ''}</div>
+      <select class="full" data-act="method" data-s="${si}" style="margin-top:6px">${Object.entries(METHODS).map(([k, v]) =>
+        `<option value="${k}" ${k === s.method ? 'selected' : ''}>${v.label}</option>`).join('')}</select>
+      <div class="meta" style="margin:5px 0">${m.note}</div>
+      ${m.oil !== undefined ? `<div class="ctrl">사용한 기름 <input type="number" min="0" step="0.5" value="${s.oilTbsp}" data-act="oil" data-s="${si}"> 큰술 (${Math.round(oilG)}g · ${Math.round(OIL.kcal * oilG / 100)}kcal)</div>` : ''}
+      ${m.fry ? `<div class="ctrl">기름 흡수율 <input type="number" min="0" max="50" step="1" value="${s.fryPct}" data-act="fry" data-s="${si}"> % (${Math.round(oilG)}g · ${Math.round(OIL.kcal * oilG / 100)}kcal)</div>` : ''}
+      ${s.items.map((it, ii) => `<div class="ing"><span class="grow">${esc(it.name)}<br><span class="meta">${Math.round(it.per100g.kcal * it.grams / 100)}kcal${it.per100g.source === '직접 입력' ? ' · 직접 입력' : ''}</span></span>
+        <input type="number" min="0" step="10" value="${it.grams}" data-act="g" data-s="${si}" data-i="${ii}">g
+        <button class="sm" data-act="idel" data-s="${si}" data-i="${ii}">✕</button></div>`).join('')}
+      <div class="search" style="margin-top:10px"><input placeholder="재료 검색 (돼지고기, 두부, 양파…)" id="sq${si}" data-act="sqkey" data-s="${si}"><button class="sm" data-act="sq" data-s="${si}">검색</button></div>
+      <div id="sres${si}"></div>
+      <button class="link" data-act="customOpen" data-s="${si}">+ 목록에 없는 재료 직접 입력</button>
+      <div class="custom" id="cus${si}" style="display:none">
+        <input class="nm" placeholder="재료 이름" id="cn${si}"><input type="number" placeholder="100g당 kcal" id="ck${si}" style="width:100px">
+        <input type="number" placeholder="g" id="cg${si}"><button class="sm" data-act="customAdd" data-s="${si}">추가</button>
+      </div>
+    </div>`;
+  }).join('');
+  renderRecipeSum();
+}
+$('steps').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-act]'); if (!b) return;
+  const si = +b.dataset.s, s = R.steps[si];
+  if (b.dataset.act === 'sdel') { R.steps.splice(si, 1); renderSteps(); }
+  if (b.dataset.act === 'idel') { s.items.splice(+b.dataset.i, 1); renderSteps(); }
+  if (b.dataset.act === 'customOpen') $('cus' + si).style.display = 'flex';
+  if (b.dataset.act === 'customAdd') {
+    const name = $('cn' + si).value.trim(), kcal = +$('ck' + si).value, g = +$('cg' + si).value || 100;
+    if (!name || !(kcal >= 0)) return;
+    s.items.push({ name, grams: g, per100g: { name, kcal, protein: null, fat: null, carbs: null, source: '직접 입력' } });
+    renderSteps();
+  }
+  if (b.dataset.act === 'sq') stepSearch(si);
+});
+$('steps').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.dataset.act === 'sqkey') stepSearch(+e.target.dataset.s); });
+$('steps').addEventListener('change', (e) => {
+  const t = e.target, s = R.steps[+t.dataset.s]; if (!s) return;
+  if (t.dataset.act === 'method') { const m = METHODS[t.value]; Object.assign(s, { method: t.value, oilTbsp: m.oil || 0, fryPct: m.fry || 10 }); renderSteps(); }
+  if (t.dataset.act === 'oil') { s.oilTbsp = +t.value || 0; renderSteps(); }
+  if (t.dataset.act === 'fry') { s.fryPct = +t.value || 0; renderSteps(); }
+  if (t.dataset.act === 'g') { s.items[+t.dataset.i].grams = +t.value || 0; renderSteps(); }
+});
+async function stepSearch(si) {
+  const q = $('sq' + si).value.trim(); if (!q) return;
+  $('sres' + si).innerHTML = '<div class="empty">검색 중…</div>';
+  const items = await searchFood(q, { raw: true });
+  $('sres' + si).innerHTML = items.length ? items.map((it, j) => `<div class="res"><span class="grow">${it.source === '내 레시피' ? '<span class="tag">내 레시피</span>' : ''}${esc(it.name)}<br>
+      <span class="meta">${srcInfo(it)} · 100g당 ${Math.round(it.kcal)}kcal</span></span><button class="sm" data-j="${j}">추가</button></div>`).join('')
+    : '<div class="empty">결과가 없어요. 아래 \'직접 입력\'을 써 보세요.</div>';
+  $('sres' + si).querySelectorAll('button').forEach(b => b.onclick = () => {
+    const it = items[b.dataset.j];
+    R.steps[si].items.push({ name: it.name, grams: 100, per100g: it });
+    renderSteps();
+    const inputs = $('steps').querySelectorAll(`input[data-act="g"][data-s="${si}"]`);
+    inputs[inputs.length - 1]?.select();
+  });
+}
+function calcRecipe() {
+  const sum = Object.fromEntries(NK.map(k => [k, 0]));
+  let weight = 0, oil = 0;
+  const add = (p, g) => { for (const k of NK) sum[k] += (p[k] || 0) * g / 100; };
+  for (const s of R.steps) {
+    for (const it of s.items) { add(it.per100g, +it.grams || 0); weight += +it.grams || 0; }
+    const o = stepOilG(s); add(OIL, o); oil += o;
+  }
+  const serv = Math.max(1, R.serv || 1), fin = R.fin || (weight + oil);
+  return { sum, weight, oil, serv, fin };
+}
+function renderRecipeSum() {
+  if (!R.steps.some(s => s.items.length)) { $('rsum').style.display = 'none'; return; }
+  const c = calcRecipe();
+  $('rsum').style.display = 'block';
+  $('rkcal').innerHTML = kcalHtml(c.sum.kcal / c.serv);
+  $('rtotal').textContent = `전체 ${Math.round(c.sum.kcal).toLocaleString()}kcal ÷ ${c.serv}인분 · 1인분 약 ${Math.round(c.fin / c.serv)}g`
+    + (c.oil ? ` · 기름 ${Math.round(c.oil)}g(${Math.round(OIL.kcal * c.oil / 100)}kcal) 포함` : '');
+  $('rmac').innerHTML = macrosHtml(c.sum, c.serv);
+}
+function recipeResult() {
+  const c = calcRecipe(), per100g = {};
+  for (const k of NK) per100g[k] = c.fin ? c.sum[k] / c.fin * 100 : 0;
+  return { per100g, serving_grams: Math.round(c.fin / c.serv), kcal_serving: c.sum.kcal / c.serv };
+}
+function addRecipeToMeal(name, per100g, g) {
+  meal.push({ name, set_name: '', grams: g, portion: { label: '1인분', grams: g }, per100g: { ...per100g, name, source: '내 레시피' } });
+  renderMeal();
+}
+$('rsave').onclick = () => {
+  R.name = $('rname').value.trim();
+  if (!R.name) { $('rerr').textContent = '요리 이름을 입력하세요.'; return; }
+  $('rerr').textContent = '';
+  R.id = R.id || Math.random().toString(36).slice(2, 10);
+  RECIPES = RECIPES.filter(y => y.id !== R.id).concat([{ ...JSON.parse(JSON.stringify(R)), ...recipeResult(), updated: Date.now() }]);
+  saveRecipes(); $('reditMode').textContent = '저장됨 ✓';
+};
+$('rmeal').onclick = () => {
+  const x = recipeResult();
+  addRecipeToMeal($('rname').value.trim() || '내 레시피', x.per100g, x.serving_grams);
+  showTab('meal'); $('summary').scrollIntoView({ behavior: 'smooth' });
+};
+
+// 내보내기 / 가져오기
+$('exportR').onclick = () => {
+  const blob = new Blob([JSON.stringify({ app: 'calorie', version: 1, recipes: RECIPES }, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `내레시피_${new Date().toISOString().slice(0, 10)}.json`; a.click();
+  $('ioMsg').textContent = `레시피 ${RECIPES.length}개를 파일로 저장했어요.`;
+};
+$('importR').onclick = () => $('importFile').click();
+$('importFile').onchange = async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const data = JSON.parse(await f.text()), list = Array.isArray(data) ? data : data.recipes;
+    if (!Array.isArray(list)) throw new Error();
+    const ok = list.filter(r => r && r.id && r.name && Array.isArray(r.steps) && r.per100g);
+    const ids = new Set(ok.map(r => r.id));
+    RECIPES = RECIPES.filter(r => !ids.has(r.id)).concat(ok);
+    saveRecipes(); renderRecipeList();
+    $('ioMsg').textContent = `레시피 ${ok.length}개를 가져왔어요.`;
+  } catch (err) { $('ioMsg').textContent = '레시피 파일을 읽을 수 없어요.'; }
+  e.target.value = '';
+};
+
+// ================================================================ 시작
+(async () => {
+  try {
+    const [core, meta] = await Promise.all([fetch('data/core.json').then(r => r.json()), fetch('data/meta.json').then(r => r.json())]);
+    CORE = core.map(wrap); META = meta;
+    $('built').textContent = `${(meta.core + meta.processed).toLocaleString()}건, ${meta.built} 기준`;
+    const oil = (await searchFood('콩기름', { raw: true })).find(x => x.group === '원재료성');
+    if (oil) OIL = { ...oil, name: '식용유(콩기름)' };
+    $('loading').style.display = 'none'; $('tab-meal').style.display = '';
+    renderMeal();
+  } catch (e) {
+    $('loading').innerHTML = '데이터를 불러오지 못했어요. 새로고침해 주세요.';
+  }
+})();
+</script>
+</body>
+</html>
