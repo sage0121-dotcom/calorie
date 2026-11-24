@@ -208,8 +208,11 @@ const GROUPS = ['음식', '원재료성', '가공식품', ''];
 const norm = (s) => String(s || '').replace(/[\s_()\[\],·\-]/g, '').toLowerCase();
 const wrap = (r) => {  // [이름, 구분, 대표, 대분류, 업체, kcal, 탄, 단, 지, 당, 나트륨, 1개중량]
   const name = r[0];
-  return { r, n: norm(name), alt: name.includes(',') ? norm(name.split(',')[1]) : null };
+  return { r, n: norm(name), m: norm(r[4]), alt: name.includes(',') ? norm(name.split(',')[1]) : null };
 };
+// 브랜드 흔한 오타·줄임말 → 식약처 DB의 업체명 표기
+const BRAND_ALIAS = [['베스킨', '배스킨'], ['배라', '배스킨라빈스'], ['br31', '배스킨라빈스']];
+const brandQuery = (q) => { for (const [a, b] of BRAND_ALIAS) if (q.includes(a)) return q.replace(a, b); return q; };
 const toItem = (r) => ({ name: r[0], group: GROUPS[r[1]], rep: r[2], category: r[3], maker: r[4], kcal: r[5],
   carbs: r[6], protein: r[7], fat: r[8], sugar: r[9], sodium: r[10], pkg_grams: r[11], source: '식약처' });
 let CORE = [], META = { shards: [] };
@@ -240,12 +243,17 @@ function portionFor(it) {
 
 async function searchFood(query, { raw = false, limit = 15 } = {}) {
   const q = norm(query); if (!q) return [];
+  const qb = brandQuery(q);   // 업체명(브랜드) 검색용
   const toks = query.toLowerCase().split(/[\s_]+/).filter(Boolean);
   const pools = [CORE, await loadShard(shardOf(query))];
   const scored = [];
   for (const pool of pools) for (const w of pool) {
     let s;
-    if (!w.n.includes(q)) { if (toks.length > 1 && toks.every(t => w.n.includes(t))) s = 3; else continue; }
+    if (!w.n.includes(q)) {
+      if (toks.length > 1 && toks.every(t => w.n.includes(t))) s = 3;
+      else if (qb.length >= 2 && w.m.includes(qb)) s = 4;   // 이름엔 없고 업체명이 일치 (예: 배스킨라빈스 메뉴)
+      else continue;
+    }
     else if (w.n === q || w.alt === q) s = 0;
     else if (w.n.startsWith(q)) s = 1;
     else s = 2;
@@ -300,18 +308,23 @@ const unitText = (p, m) => /^1[^\d.]/.test(p.label) ? ML[m] + p.label.slice(1) :
 
 $('qBtn').onclick = mealSearch;
 $('q').onkeydown = (e) => { if (e.key === 'Enter') mealSearch(); };
-async function mealSearch() {
+let qLimit = 20;
+async function mealSearch(more = false) {
   const q = $('q').value.trim(); if (!q) return;
-  $('qres').innerHTML = '<div class="empty">검색 중…</div>';
-  const items = await searchFood(q);
+  qLimit = more === true ? qLimit + 30 : 20;
+  if (more !== true) $('qres').innerHTML = '<div class="empty">검색 중…</div>';
+  const items = await searchFood(q, { limit: qLimit });
   if (!items.length) { $('qres').innerHTML = '<div class="empty">결과가 없어요. 더 짧거나 다른 이름으로 검색해 보세요.<br>(예: 계란후라이 → 달걀프라이)</div>'; return; }
-  showResults(items);
+  const hasMore = items.filter(i => i.source !== '내 레시피').length >= qLimit;
+  showResults(items, '', hasMore);
 }
-function showResults(items, title = '') {
+function showResults(items, title = '', hasMore = false) {
   $('qres').innerHTML = title + items.map((it, j) => `<div class="res"><span class="grow">${it.source === '내 레시피' ? '<span class="tag">내 레시피</span>' : ''}${esc(it.name)}<br>
     <span class="meta">${srcInfo(it)} · ${esc(it.portion.label)} ${Math.round(it.kcal * it.portion.grams / 100)}kcal</span></span>
     ${it.variants > 1 ? `<button class="sm" data-v="${j}">제품별</button>` : ''}
-    <button class="sm" data-j="${j}">추가</button></div>`).join('');
+    <button class="sm" data-j="${j}">추가</button></div>`).join('')
+    + (hasMore ? `<button class="link" id="moreRes" style="width:100%;padding:12px 0">결과 더 보기 (지금 ${items.length}개)</button>` : '');
+  if (hasMore) $('moreRes').onclick = () => { $('moreRes').textContent = '불러오는 중…'; mealSearch(true); };
   $('qres').querySelectorAll('button[data-j]').forEach(b => b.onclick = () => {
     const it = items[b.dataset.j];
     meal.push({ name: it.name, set_name: '', grams: it.portion.grams, portion: it.portion, per100g: it });
